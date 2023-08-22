@@ -5,315 +5,257 @@ chai.use(chaiAsPromised);
 
 const { expect } = chai;
 const { ethers } = require('hardhat');
+const { constants } = require('@openzeppelin/test-helpers');
 
 describe('Migrate Token', () => {
-    const contracts = {};
-    const tokens = {};
-    let owner; let user1; let user2;
+  const contracts = {};
+  const tokens = {};
+  let owner; let user1; let user2;
 
-    before('Deploy contracts and mint some tokens', async () => {
-        [owner, user1, user2] = await ethers.getSigners();
+  before('Deploy contracts and mint some tokens', async () => {
+      [owner, user1, user2] = await ethers.getSigners();
 
-        const TOKEN = await ethers.getContractFactory('SimpleERC20');
-        const MIGRATE_CONTRACT = await ethers.getContractFactory('MigrateToken');
+      const TOKEN = await ethers.getContractFactory('SimpleERC20');
+      const MIGRATE_CONTRACT = await ethers.getContractFactory('MigrateToken');
 
-        // deploy source and target token
-        contracts.sourceToken = await TOKEN.deploy();
-        contracts.targetToken = await TOKEN.deploy();
+      // deploy source and target token
+      contracts.sourceToken = await TOKEN.deploy();
+      contracts.targetToken = await TOKEN.deploy();
 
-        const sourceTokenAddress = await contracts.sourceToken.getAddress();
-        const targetTokenAddress = await contracts.targetToken.getAddress();
+      contracts.sourceToken.address = await contracts.sourceToken.getAddress();
+      contracts.targetToken.address = await contracts.targetToken.getAddress();
 
-        // deploy migrate contract
-        contracts.migrateToken = await MIGRATE_CONTRACT.deploy(sourceTokenAddress, targetTokenAddress);
+      // deploy migrate contract
+      contracts.migrateToken = await MIGRATE_CONTRACT.deploy(contracts.sourceToken.address, contracts.targetToken.address);
 
-        // transfer some source tokens to user1
-        await contracts.sourceToken.transfer(user1.address, BigInt("10000000"));
+      contracts.migrateToken.address = await contracts.migrateToken.getAddress();
 
-        // transfer some source tokens to user2
-        await contracts.sourceToken.transfer(user2.address, BigInt("10000000"));
+      // transfer some target tokens to user1
+      await contracts.targetToken.transfer(user1.address, BigInt("1000"));
 
-        contracts.owner = {
-          sourceToken: contracts.sourceToken.connect(owner),
-          targetToken: contracts.targetToken.connect(owner),
-          migrateToken: contracts.migrateToken.connect(owner),
-        };
-        contracts.user1 = {
-          sourceToken: contracts.sourceToken.connect(user1),
-          targetToken: contracts.targetToken.connect(user1),
-          migrateToken: contracts.migrateToken.connect(user1),
-        };
-        contracts.user2 = {
-          sourceToken: contracts.sourceToken.connect(user2),
-          targetToken: contracts.targetToken.connect(user2),
-          migrateToken: contracts.migrateToken.connect(user2),
-        };
+      // transfer some source tokens to user1
+      await contracts.sourceToken.transfer(user1.address, BigInt("10000000"));
+
+      contracts.owner = {
+        sourceToken: contracts.sourceToken.connect(owner),
+        targetToken: contracts.targetToken.connect(owner),
+        migrateToken: contracts.migrateToken.connect(owner),
+      };
+      contracts.user1 = {
+        sourceToken: contracts.sourceToken.connect(user1),
+        targetToken: contracts.targetToken.connect(user1),
+        migrateToken: contracts.migrateToken.connect(user1),
+      };
+      contracts.user2 = {
+        sourceToken: contracts.sourceToken.connect(user2),
+        targetToken: contracts.targetToken.connect(user2),
+        migrateToken: contracts.migrateToken.connect(user2),
+      };
+  });
+
+  it('The successfull deployment', async () => {
+    expect(await contracts.sourceToken.getAddress()).to.be.a('string');
+    expect(await contracts.targetToken.getAddress()).to.be.a('string');
+    expect(await contracts.migrateToken.getAddress()).to.be.a('string');
+
+    // query the balance of user1
+    const user1Balance = await contracts.sourceToken.balanceOf(user1.address);
+    expect(user1Balance).to.equal(BigInt("10000000"));
+
+    // query the balance of user2
+    const user2Balance = await contracts.sourceToken.balanceOf(user2.address);
+    expect(user2Balance).to.equal(BigInt("0"));
+
+    // the source token and target token of migrate contract must be correct
+    const sourceToken = await contracts.migrateToken.sourceToken();
+    const targetToken = await contracts.migrateToken.targetToken();
+
+    expect(sourceToken).to.equal(contracts.sourceToken.address);
+    expect(targetToken).to.equal(contracts.targetToken.address);
+  });
+
+  describe('Deposit source token', () => {
+      it('Cannot deposit zero token', async () => {
+        // owner deposit zero token to migrate contract
+        await expect(contracts.owner.migrateToken.deposit(BigInt("0"))).eventually.be.rejectedWith('Invalid amount');
+      });
+
+      it('Anyone can deposit target token to migrate contract', async () => {
+        // owner deposit 1000 token to migrate contract
+        await contracts.owner.targetToken.approve(contracts.migrateToken.address, BigInt("1000"));
+        await contracts.owner.migrateToken.deposit(BigInt("1000"));
+
+        // the balance of migrate contract must be 1000
+        await expect(contracts.targetToken.balanceOf(contracts.migrateToken.address)).eventually.eq(BigInt("1000"));
+
+        // user1 deposit 1000 token to migrate contract
+        await contracts.user1.targetToken.approve(contracts.migrateToken.address, BigInt("1000"));
+        await contracts.user1.migrateToken.deposit(BigInt("1000"));
+
+        // the remaining balance of user1 must be zero
+        await expect(contracts.targetToken.balanceOf(user1.address)).eventually.eq(BigInt("0"));
+
+        // the balance of migrate contract must be 1000 + 1000 = 2000
+        await expect(contracts.targetToken.balanceOf(contracts.migrateToken.address)).eventually.eq(BigInt("2000"));
+      });
+
+      it('Deposit by transfer target token to migrate contract directly', async () => {
+        // owner transfer 1000 token to migrate contract
+        await contracts.owner.targetToken.transfer(contracts.migrateToken.address, BigInt("1000"));
+
+        // the balance of migrate contract must be 2000 + 1000 = 3000
+        await expect(contracts.targetToken.balanceOf(contracts.migrateToken.address)).eventually.eq(BigInt("3000"));
+      });
+  });
+
+  describe('Withdraw tokens', () => {
+    it('cannot withdraw because not owner', async () => {
+      // user1 withdraw target token
+      await expect(contracts.user1.migrateToken.withdraw(contracts.targetToken.address)).eventually.be.rejectedWith('Ownable: caller is not the owner');
     });
 
-    it('The successfull deployment', async () => {
-      // query the balance of user1
-      const user1Balance = await contracts.sourceToken.balanceOf(user1.address);
-      expect(user1Balance).to.equal(BigInt("10000000"));
-
-      // query the balance of user2
-      const user2Balance = await contracts.sourceToken.balanceOf(user2.address);
-      expect(user2Balance).to.equal(BigInt("10000000"));
-
-      expect(await contracts.sourceToken.getAddress()).to.be.a('string');
-      expect(await contracts.targetToken.getAddress()).to.be.a('string');
-      expect(await contracts.migrateToken.getAddress()).to.be.a('string');
+    it('cannot withdraw because token address is zero', async () => {
+      // owner withdraw token with address is zero
+      await expect(contracts.owner.migrateToken.withdraw(constants.ZERO_ADDRESS)).eventually.be.rejectedWith('Invalid token address');
     });
 
-    // describe('Listings with native currency', () => {
-    //     it('cannot create a listing with native currency', async () => {
-    //         const tokenId = await getTestToken(user1.address, contracts.nft);
-    //         await contracts.user1.nft.approve(contracts.marketplace.address, tokenId);
-    //         expect(
-    //             contracts.user1.marketplace.listNft(
-    //                 contracts.nft.address,
-    //                 tokenId,
-    //                 price,
-    //                 ethers.constants.AddressZero,
-    //             ),
-    //         ).eventually.be.rejectedWith('Currency not allowed');
-    //     });
-    // });
+    it('owner can withdraw successfully', async () => {
+      // query the balance of owner before withdraw
+      const ownerBalance = await contracts.targetToken.balanceOf(owner.address);
 
-    // describe('Listings with ERC20', () => {
-    //     before('deploy erc20 token', async () => {
-    //         const ERC20 = await ethers.getContractFactory('SimpleERC20');
-    //         contracts.erc20 = await ERC20.deploy();
-    //         await contracts.erc20.deployed();
-    //         contracts.user2.erc20 = contracts.erc20.connect(user2);
+      // owner withdraw target token
+      await contracts.owner.migrateToken.withdraw(contracts.targetToken.address);
 
-    //         // give user2 some tokens to spend
-    //         await contracts.erc20.transfer(user2.address, price * 10000);
-    //     });
+      // query the balance of owner after withdraw
+      const ownerBalanceAfter = await contracts.targetToken.balanceOf(owner.address);
 
-    //     it('cannot create a listing without approval for token', async () => {
-    //         const tokenId = await getTestToken(user1.address, contracts.nft);
-    //         return expect(
-    //             contracts.user1.marketplace.listNft(
-    //                 contracts.nft.address,
-    //                 tokenId,
-    //                 price,
-    //                 contracts.erc20.address,
-    //             ),
-    //         ).eventually.be.rejectedWith('Currency not allowed');
-    //     });
+      // the balance of owner must be ownerBalance + 3000
+      expect(ownerBalanceAfter).to.equal(ownerBalance + BigInt("3000"));
 
-    //     it('cannot listing because contract address is not allowed', async () => {
-    //         const tokenId = await getTestToken(user1.address, contracts.nft);
-    //         await contracts.marketplace.addCurrency(contracts.erc20.address);
-    //         await contracts.user1.nft.approve(contracts.marketplace.address, tokenId);
-    //         return expect(
-    //         contracts.user1.marketplace.listNft(
-    //             contracts.nft.address,
-    //             tokenId,
-    //             price,
-    //             contracts.erc20.address,
-    //         )).eventually.to.be.rejectedWith('Tokenn contract not allowed');
-    //     });
+      // the balance of migrate contract must be zero
+      await expect(contracts.targetToken.balanceOf(contracts.migrateToken.address)).eventually.eq(BigInt("0"));
+    });
 
-    //     it('cannot add new NFT contract because not admin', async () => {
-    //         const tokenId = await getTestToken(user1.address, contracts.nft);
-    //         await contracts.marketplace.addCurrency(contracts.erc20.address);
-    //         await contracts.user1.nft.approve(contracts.marketplace.address, tokenId);
-    //         return expect(
-    //         contracts.user1.marketplace.addNftContract(contracts.nft.address)).eventually.to.be.rejectedWith('AccessControl');
-    //     });
+    it('cannot withdraw because balance is zero', async () => {
+      // owner withdraw target token
+      await expect(contracts.owner.migrateToken.withdraw(contracts.targetToken.address)).eventually.be.rejectedWith('Invalid balance');
+    });
+  });
 
-    //     it('cannot cancel after sold', async () => {
-    //         const tokenId = await getTestToken(user1.address, contracts.nft);
-    //         await contracts.marketplace.addCurrency(contracts.erc20.address);
-    //         await contracts.user1.nft.approve(contracts.marketplace.address, tokenId);
+  describe('Convert source tokens to target tokens', () => {
+    it('cannot convert because balance of target token is zero', async () => {
+      // user1 convert 1000 source token to target token
+      await expect(contracts.user1.migrateToken.convert(BigInt("1000"))).eventually.be.rejectedWith('ERC20: insufficient allowance');
+    });
 
-    //         // admin must allows to use nft contract in marketplace
-    //         await contracts.marketplace.addNftContract(contracts.nft.address);
+    it('cannot convert because balance of source token is zero', async () => {
+      // owner approve 1000 target token to migrate contract
+      await contracts.owner.targetToken.approve(contracts.migrateToken.address, BigInt("1000"));
 
-    //         await contracts.user1.marketplace.listNft(
-    //             contracts.nft.address,
-    //             tokenId,
-    //             price,
-    //             contracts.erc20.address,
-    //         );
+      // owner deposit 1000 target token to migrate contract
+      await contracts.owner.migrateToken.deposit(BigInt("1000"));
 
-    //         await contracts.user2.erc20.approve(contracts.marketplace.address, price);
-    //         await contracts.user2.marketplace.buy(contracts.nft.address, tokenId, price, contracts.erc20.address);
+      // user2 approve 100 source token to migrate contract
+      await contracts.user2.sourceToken.approve(contracts.migrateToken.address, BigInt("100"));
 
-    //         return expect(contracts.user1.marketplace.cancelListing(contracts.nft.address, tokenId))
-    //         .eventually.be.rejectedWith('Token not listed for sale');
-    //     });
+      // user2 convert 100 source token to target token
+      await expect(contracts.user2.migrateToken.convert(BigInt("100"))).eventually.be.rejectedWith('ERC20: transfer amount exceeds balance');
+    });
 
-    //     it("cannot cancel other's listing", async () => {
-    //         const tokenId = await getTestToken(user1.address, contracts.nft);
-    //         await contracts.marketplace.addCurrency(contracts.erc20.address);
-    //         await contracts.user1.nft.approve(contracts.marketplace.address, tokenId);
-    //         await contracts.user1.marketplace.listNft(
-    //             contracts.nft.address,
-    //             tokenId,
-    //             price,
-    //             contracts.erc20.address,
-    //         );
+    it('cannot convert because convert amount is zero', async () => {
+      // user1 convert 0 source token to target token
+      await expect(contracts.user1.migrateToken.convert(BigInt("0"))).eventually.be.rejectedWith('Invalid amount');
+    });
 
-    //         return expect(contracts.user2.marketplace.cancelListing(contracts.nft.address, tokenId))
-    //         .eventually.be.rejectedWith('Only seller can cancel');
-    //     });
+    it('cannot convert because amount is greater than user\'s balance', async () => {
+      // user1 approve 1001 source token to migrate contract
+      await contracts.user1.sourceToken.approve(contracts.migrateToken.address, BigInt("1001"));
 
-    //     it('can cancel', async () => {
-    //         const tokenId = await getTestToken(user1.address, contracts.nft);
-    //         await contracts.marketplace.addCurrency(contracts.erc20.address);
-    //         await contracts.user1.nft.approve(contracts.marketplace.address, tokenId);
-    //         await contracts.user1.marketplace.listNft(
-    //             contracts.nft.address,
-    //             tokenId,
-    //             price,
-    //             contracts.erc20.address,
-    //         );
+      // user1 convert 1001 source token to target token
+      await expect(contracts.user1.migrateToken.convert(BigInt("1001"))).eventually.be.rejectedWith('ERC20: transfer amount exceeds balance');
+    });
 
-    //         await contracts.user1.marketplace.cancelListing(contracts.nft.address, tokenId);
-    //         expect(await contracts.nft.ownerOf(tokenId)).to.be.equal(user1.address);
-    //     });
-    //     describe('Create listing - Buy a NFT', async () => {
-    //         let tokenId;
-    //         it('can create a listing after approval of currency', async () => {
-    //             tokenId = await getTestToken(user1.address, contracts.nft);
-    //             await contracts.marketplace.addCurrency(contracts.erc20.address);
-    //             await contracts.user1.nft.approve(contracts.marketplace.address, tokenId);
-    //             await contracts.user1.marketplace.listNft(
-    //                 contracts.nft.address,
-    //                 tokenId,
-    //                 price,
-    //                 contracts.erc20.address,
-    //             );
-    //             const listing = await contracts.marketplace.listings(contracts.nft.address, tokenId);
-    //             expect(listing.seller).to.be.equal(user1.address);
-    //             expect(listing.price.eq(price)).to.be.true;
-    //             expect(listing.startAt.gt(0)).to.be.true;
-    //             expect(listing.currency).to.be.equal(contracts.erc20.address);
-    //         });
+    it('cannot convert because amount is greater than migrate contract\'s balance', async () => {
+      // transfer 1000 target token to user1
+      await contracts.owner.targetToken.transfer(user1.address, BigInt("1000"));
 
-    //         it('cannot buy without approve spend token', async () => {
-    //             return expect(
-    //                 contracts.user2.marketplace.buy(contracts.nft.address, tokenId, price, contracts.erc20.address),
-    //             ).eventually.be.rejectedWith("VM Exception while processing transaction: reverted with reason string 'ERC20: insufficient allowance'");
-    //         });
+      // user1 approve 1500 source token to migrate contract
+      await contracts.user1.sourceToken.approve(contracts.migrateToken.address, BigInt("1500"));
 
-    //         it('cannot buy without enough token', async () => {
-    //             await contracts.user2.erc20.approve(contracts.marketplace.address, 9999);
-    //             return expect(
-    //                 contracts.user2.marketplace.buy(contracts.nft.address, tokenId, price, contracts.erc20.address),
-    //             ).eventually.be.rejectedWith("VM Exception while processing transaction: reverted with reason string 'ERC20: insufficient allowance'");
-    //         });
+      // user1 convert 1000 source token to target token
+      await expect(contracts.user1.migrateToken.convert(BigInt("1500"))).eventually.be.rejectedWith('ERC20: transfer amount exceeds balance');
+    });
 
-    //         it('can buy with more than enough token', async () => {
-    //             const currentContractBalance = await contracts.erc20.balanceOf(contracts.marketplace.address);
-    //             const currentSellerBalance = await contracts.erc20.balanceOf(user1.address);
-    //             const currentBuyerBalance = await contracts.erc20.balanceOf(user2.address);
+    it('user can convert successfully', async () => {
+      // query the source token balance and target token balance of user1 before convert
+      const user1SourceTokenBalance = await contracts.user1.sourceToken.balanceOf(user1.address);
+      const user1TargetTokenBalance = await contracts.user1.targetToken.balanceOf(user1.address);
 
-    //             await contracts.user2.erc20.approve(contracts.marketplace.address, price);
-    //             await contracts.user2.marketplace.buy(contracts.nft.address, tokenId, price, contracts.erc20.address);
-    //             expect(await contracts.nft.ownerOf(tokenId)).to.be.equal(user2.address);
+      // query the source token balance and target token balance of migrate contract before convert
+      const migrateSourceTokenBalance = await contracts.sourceToken.balanceOf(contracts.migrateToken.address);
+      const migrateTargetTokenBalance = await contracts.targetToken.balanceOf(contracts.migrateToken.address);
 
-    //             const newContractBalance = await contracts.erc20.balanceOf(contracts.marketplace.address);
-    //             const newSellerBalance = await contracts.erc20.balanceOf(user1.address);
-    //             const newBuyerBalance = await contracts.erc20.balanceOf(user2.address);
+      // user1 approve 500 source token to migrate contract
+      await contracts.user1.sourceToken.approve(contracts.migrateToken.address, BigInt("500"));
 
-    //             expect(newContractBalance.eq(currentContractBalance.add(price / 100 * feeRate))).to.be.true;
-    //             expect(newSellerBalance.eq(currentSellerBalance.add(price / 100 * (100 - feeRate)))).to.be.true;
-    //             expect(newBuyerBalance.eq(currentBuyerBalance.sub(price))).to.be.true;
-    //         });
-    //     });
-    // });
+      // user1 convert 1000 source token to target token
+      await contracts.user1.migrateToken.convert(BigInt("500"));
 
-    // describe('Special Fee', () => {
-    //     it('can set special fee for nft contract address', async () => {
-    //         const currentSpecialFee = await contracts.marketplace.specialFee(contracts.nft.address);
-    //         expect(currentSpecialFee.enabled).to.equal(false);
+      // query the source token balance and target token balance of user1 after convert
+      const user1SourceTokenBalanceAfter = await contracts.user1.sourceToken.balanceOf(user1.address);
+      const user1TargetTokenBalanceAfter = await contracts.user1.targetToken.balanceOf(user1.address);
 
-    //         await contracts.marketplace.setSpecialFee(contracts.nft.address, 5);
-    //         const newSpecialFee = await contracts.marketplace.specialFee(contracts.nft.address);
-    //         expect(newSpecialFee.enabled).to.equal(true);
-    //         expect(newSpecialFee.rate.eq(5)).to.be.true;
-    //     });
+      // query the source token balance and target token balance of migrate contract after convert
+      const migrateSourceTokenBalanceAfter = await contracts.sourceToken.balanceOf(contracts.migrateToken.address);
+      const migrateTargetTokenBalanceAfter = await contracts.targetToken.balanceOf(contracts.migrateToken.address);
 
-    //     it('can remove special fee for nft contract address', async () => {
-    //         const currentSpecialFee = await contracts.marketplace.specialFee(contracts.nft.address);
-    //         expect(currentSpecialFee.enabled).to.equal(true);
+      // the source token balance of user1 must be user1SourceTokenBalance - 500
+      expect(user1SourceTokenBalanceAfter).to.equal(user1SourceTokenBalance - BigInt("500"));
 
-    //         await contracts.marketplace.removeSpecialFee(contracts.nft.address);
-    //         const newSpecialFee = await contracts.marketplace.specialFee(contracts.nft.address);
-    //         expect(newSpecialFee.enabled).to.equal(false);
-    //     });
+      // the target token balance of user1 must be user1TargetTokenBalance + 500
+      expect(user1TargetTokenBalanceAfter).to.equal(user1TargetTokenBalance + BigInt("500"));
 
-    //     it('can remove non existent nft contract address', async () => {
-    //         expect(await contracts.marketplace.removeSpecialFee(contracts.nft.address)).to.be.ok;
-    //     });
+      // the source token balance of migrate contract must be migrateSourceTokenBalance + 500
+      expect(migrateSourceTokenBalanceAfter).to.equal(migrateSourceTokenBalance + BigInt("500"));
 
-    //     it('change fee according to special fee - erc20', async () => {
-    //         feeRate = 5;
-    //         await contracts.marketplace.setSpecialFee(contracts.nft.address, feeRate);
+      // the target token balance of migrate contract must be migrateTargetTokenBalance - 500
+      expect(migrateTargetTokenBalanceAfter).to.equal(migrateTargetTokenBalance - BigInt("500"));
+    });
 
-    //         // user1 puts a token on sale
-    //         tokenId = await getTestToken(user1.address, contracts.nft);
-    //         await contracts.user1.nft.approve(contracts.marketplace.address, tokenId);
-    //         await contracts.user1.marketplace.listNft(
-    //             contracts.nft.address,
-    //             tokenId,
-    //             price,
-    //             contracts.erc20.address,
-    //         );
+    it('user can convert successfully twice', async () => {
+      // query the source token balance and target token balance of user1 before convert
+      const user1SourceTokenBalance = await contracts.user1.sourceToken.balanceOf(user1.address);
+      const user1TargetTokenBalance = await contracts.user1.targetToken.balanceOf(user1.address);
 
-    //         const currentContractBalance = await contracts.erc20.balanceOf(contracts.marketplace.address);
-    //         const currentSellerBalance = await contracts.erc20.balanceOf(user1.address);
-    //         const currentBuyerBalance = await contracts.erc20.balanceOf(user2.address);
+      // query the source token balance and target token balance of migrate contract before convert
+      const migrateSourceTokenBalance = await contracts.sourceToken.balanceOf(contracts.migrateToken.address);
+      const migrateTargetTokenBalance = await contracts.targetToken.balanceOf(contracts.migrateToken.address);
 
-    //         // user2 buys the token
-    //         await contracts.user2.erc20.approve(contracts.marketplace.address, price);
-    //         await contracts.user2.marketplace.buy(contracts.nft.address, tokenId, price, contracts.erc20.address);
-    //         expect(await contracts.nft.ownerOf(tokenId)).to.be.equal(user2.address);
+      // user1 approve 500 source token to migrate contract
+      await contracts.user1.sourceToken.approve(contracts.migrateToken.address, BigInt("500"));
 
-    //         const newContractBalance = await contracts.erc20.balanceOf(contracts.marketplace.address);
-    //         const newSellerBalance = await contracts.erc20.balanceOf(user1.address);
-    //         const newBuyerBalance = await contracts.erc20.balanceOf(user2.address);
+      // user1 convert 1000 source token to target token
+      await contracts.user1.migrateToken.convert(BigInt("500"));
 
-    //         expect(newContractBalance.eq(currentContractBalance.add(price / 100 * feeRate))).to.be.true;
-    //         expect(newSellerBalance.eq(currentSellerBalance.add(price / 100 * (100 - feeRate)))).to.be.true;
-    //         expect(newBuyerBalance.eq(currentBuyerBalance.sub(price))).to.be.true;
-    //     });
-    // });
+      // query the source token balance and target token balance of user1 after convert
+      const user1SourceTokenBalanceAfter = await contracts.user1.sourceToken.balanceOf(user1.address);
+      const user1TargetTokenBalanceAfter = await contracts.user1.targetToken.balanceOf(user1.address);
 
-    // describe('Admin withdraw funds', () => {
-    //     it('admin can withdraw native currency', async () => {
-    //         const currentContractBalance = await ethers.provider.getBalance(contracts.marketplace.address);
-    //         const currentOwnerBalance = await ethers.provider.getBalance(owner.address);
+      // query the source token balance and target token balance of migrate contract after convert
+      const migrateSourceTokenBalanceAfter = await contracts.sourceToken.balanceOf(contracts.migrateToken.address);
+      const migrateTargetTokenBalanceAfter = await contracts.targetToken.balanceOf(contracts.migrateToken.address);
 
-    //         const tx = await contracts.marketplace.adminClaim(ethers.constants.AddressZero);
-    //         const receipt = await tx.wait();
-    //         const expectedBalance = currentOwnerBalance.sub(receipt.gasUsed.mul(receipt.effectiveGasPrice)).add(currentContractBalance);
+      // the source token balance of user1 must be user1SourceTokenBalance - 500
+      expect(user1SourceTokenBalanceAfter).to.equal(user1SourceTokenBalance - BigInt("500"));
 
-    //         const newContractBalance = await ethers.provider.getBalance(contracts.marketplace.address);
-    //         const newOwnerBalance = await ethers.provider.getBalance(owner.address);
+      // the target token balance of user1 must be user1TargetTokenBalance + 500
+      expect(user1TargetTokenBalanceAfter).to.equal(user1TargetTokenBalance + BigInt("500"));
 
-    //         expect(newContractBalance.eq(0)).to.be.true;
-    //         expect(newOwnerBalance.eq(expectedBalance)).to.be.true;
-    //     });
+      // the source token balance of migrate contract must be migrateSourceTokenBalance + 500
+      expect(migrateSourceTokenBalanceAfter).to.equal(migrateSourceTokenBalance + BigInt("500"));
 
-    //     it('admin can withdraw erc20', async () => {
-    //         const currentContractBalance = await contracts.erc20.balanceOf(contracts.marketplace.address);
-    //         const currentOwnerBalance = await contracts.erc20.balanceOf(owner.address);
-
-    //         await contracts.marketplace.adminClaim(contracts.erc20.address);
-
-    //         const newContractBalance = await contracts.erc20.balanceOf(contracts.marketplace.address);
-    //         const newOwnerBalance = await contracts.erc20.balanceOf(owner.address);
-
-    //         expect(newContractBalance.eq(0)).to.be.true;
-    //         expect(newOwnerBalance.eq(currentOwnerBalance.add(currentContractBalance))).to.be.true;
-    //     });
-
-    //     it('others cannot withdraw native currency', async () => expect(contracts.user1.marketplace.adminClaim(ethers.constants.AddressZero)).eventually.be.rejectedWith('AccessControl'));
-
-    //     it('others cannot withdraw erc20', async () => expect(contracts.user1.marketplace.adminClaim(contracts.erc20.address)).eventually.be.rejectedWith('AccessControl'));
-    // });
+      // the target token balance of migrate contract must be migrateTargetTokenBalance - 500
+      expect(migrateTargetTokenBalanceAfter).to.equal(migrateTargetTokenBalance - BigInt("500"));
+    });
+  });
 });

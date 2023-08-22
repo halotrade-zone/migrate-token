@@ -42,15 +42,12 @@ contract MigrateToken is Ownable {
         targetToken = _targetToken;
     }
 
-    /// @dev Deposit target tokens to the contract by the owner
-    /// @notice The approving tokens will be executed automatically by the contract
+    /// @dev Deposit target tokens to the contract by any address
+    /// @notice The approving tokens will be executed by the sender
     /// @param amount The amount of tokens to deposit
-    function deposit(uint amount) public onlyOwner {
+    function deposit(uint amount) public {
         // the amount must be greater than 0
         require(amount > 0, "Invalid amount");
-
-        // the owner must approve the contract to transfer the tokens :))
-        IERC20(targetToken).approve(address(this), amount);
 
         // Transfer the tokens from the sender to this contract
         IERC20(targetToken).transferFrom(msg.sender, address(this), amount);
@@ -82,6 +79,9 @@ contract MigrateToken is Ownable {
     /// @notice The sender must approve the contract to transfer the tokens by himself
     /// @param amount The amount of tokens to convert
     function convert(uint amount) public {
+        // the amount must be greater than 0
+        require(amount > 0, "Invalid amount");
+
         // Transfer the tokens from the sender to this contract
         IERC20(sourceToken).transferFrom(msg.sender, address(this), amount);
 
