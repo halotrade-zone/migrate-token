@@ -6,7 +6,6 @@ require('hardhat-gas-reporter');
 require('hardhat-deploy');
 // require('@nomiclabs/hardhat-solhint');
 // require('@openzeppelin/hardhat-upgrades');
-// require('@nomiclabs/hardhat-ethers');
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {

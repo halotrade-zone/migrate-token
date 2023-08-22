@@ -1,8 +1,9 @@
+const { constants } = require('@openzeppelin/test-helpers');
 module.exports = async ({
   getNamedAccounts,
   deployments,
 }) => {
-  const { deploy } = deployments;
+  const { deploy, execute } = deployments;
   const { deployer } = await getNamedAccounts();
 
   const minter = '0x4dC0ce5d2F410085B0Aa3f60c9fFA2f662Aa38D8';
@@ -24,6 +25,22 @@ module.exports = async ({
   });
 
   console.log('target_token.address', target_token.address);
+
+  let migrate_contract = await deploy('MigrateToken', {
+    from: deployer,
+    gasLimit: 6000000,
+    args: [source_token.address, target_token.address],
+    log: true
+  });
+
+  const adminRole = constants.ZERO_BYTES32;
+  await execute(
+    'MigrateToken',
+    { from: deployer, log: true, gasLimit: 60000 },
+    'grantRole',
+    adminRole,
+    minter,
+);
 };
 
 module.exports.tags = ['nft_and_token'];
