@@ -19,8 +19,8 @@ describe('Migrate Token', () => {
       const MIGRATE_CONTRACT = await ethers.getContractFactory('MigrateToken');
 
       // deploy source and target token
-      contracts.sourceToken = await TOKEN.deploy();
-      contracts.targetToken = await TOKEN.deploy();
+      contracts.sourceToken = await TOKEN.deploy("Source Token", owner.address);
+      contracts.targetToken = await TOKEN.deploy("Target Token", owner.address);
 
       contracts.sourceToken.address = await contracts.sourceToken.getAddress();
       contracts.targetToken.address = await contracts.targetToken.getAddress();
