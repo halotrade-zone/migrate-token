@@ -3,7 +3,7 @@ pragma solidity ^0.8.9;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "hardhat/console.sol";
+// import "hardhat/console.sol";
 
 contract MigrateToken is Ownable {
     // The address of the source token
@@ -13,13 +13,13 @@ contract MigrateToken is Ownable {
     address public targetToken;
 
     // event convert tokens from the source token to the target token
-    event Convert(address user, uint amount, uint when);
+    event Convert(address user, uint256 amount, uint256 when);
 
     // event contract owner deposit target tokens
-    event Deposit(uint amount, uint when);
+    event Deposit(uint256 amount, uint256 when);
 
     // event contract owner withdraw all tokens
-    event Withdraw(address tokenAddress, uint amount, uint when);
+    event Withdraw(address tokenAddress, uint256 amount, uint256 when);
 
     // The constructor function, which sets the addresses of the tokens
     constructor(address _sourceToken, address _targetToken) {
@@ -44,15 +44,15 @@ contract MigrateToken is Ownable {
 
     /// @dev Deposit target tokens to the contract by any address
     /// @notice The approving tokens will be executed by the sender
-    /// @param amount The amount of tokens to deposit
-    function deposit(uint amount) public {
+    /// @param _amount The amount of tokens to deposit
+    function deposit(uint256 _amount) public {
         // the amount must be greater than 0
-        require(amount > 0, "Invalid amount");
+        require(_amount > 0, "Invalid amount");
 
         // Transfer the tokens from the sender to this contract
-        IERC20(targetToken).transferFrom(msg.sender, address(this), amount);
+        IERC20(targetToken).transferFrom(msg.sender, address(this), _amount);
 
-        emit Deposit(amount, block.timestamp);
+        emit Deposit(_amount, block.timestamp);
     }
 
     /// @dev Withdraw tokens from the contract by the owner
@@ -63,7 +63,7 @@ contract MigrateToken is Ownable {
         require(_tokenAddress != address(0), "Invalid token address");
 
         // get the balance of the token
-        uint balance = IERC20(_tokenAddress).balanceOf(address(this));
+        uint256 balance = IERC20(_tokenAddress).balanceOf(address(this));
 
         // the balance must be greater than 0
         require(balance > 0, "Invalid balance");
@@ -77,17 +77,17 @@ contract MigrateToken is Ownable {
     // PUBLIC FUNCTIONS
     /// @dev Convert the tokens from the source token to the target token
     /// @notice The sender must approve the contract to transfer the tokens by himself
-    /// @param amount The amount of tokens to convert
-    function convert(uint amount) public {
+    /// @param _amount The amount of tokens to convert
+    function convert(uint _amount) public {
         // the amount must be greater than 0
-        require(amount > 0, "Invalid amount");
+        require(_amount > 0, "Invalid amount");
 
         // Transfer the tokens from the sender to this contract
-        IERC20(sourceToken).transferFrom(msg.sender, address(this), amount);
+        IERC20(sourceToken).transferFrom(msg.sender, address(this), _amount);
 
         // Transfer the tokens from this contract to the sender
-        IERC20(targetToken).transfer(msg.sender, amount);
+        IERC20(targetToken).transfer(msg.sender, _amount);
 
-        emit Convert(msg.sender, amount, block.timestamp);
+        emit Convert(msg.sender, _amount, block.timestamp);
     }
 }

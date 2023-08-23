@@ -1,4 +1,3 @@
-const { constants } = require('@openzeppelin/test-helpers');
 module.exports = async ({
   getNamedAccounts,
   deployments,
@@ -33,12 +32,10 @@ module.exports = async ({
     log: true
   });
 
-  const adminRole = constants.ZERO_BYTES32;
   await execute(
     'MigrateToken',
     { from: deployer, log: true, gasLimit: 60000 },
-    'grantRole',
-    adminRole,
+    'transferOwnership',
     minter,
 );
 };
