@@ -40,4 +40,4 @@ module.exports = async ({
 );
 };
 
-module.exports.tags = ['nft_and_token'];
+module.exports.tags = ['mirate_contract'];

@@ -50,7 +50,7 @@ module.exports = {
     },
   },
   paths: {
-      deploy: 'scripts',
+      deploy: 'scripts/mainnet',
       deployments: 'deployments',
   },
 };
