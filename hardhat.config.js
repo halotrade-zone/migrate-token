@@ -34,11 +34,11 @@ module.exports = {
           throwOnTransactionFailures: true,
       },
       mainnet: {
-          url: 'https://bsc-dataseed.binance.org/',
+          url: 'https://bsc-dataseed1.binance.org/',
           chainId: 56,
           gasPrice: 'auto',
           accounts: [ privateKey ],
-          gas: 20000000,
+          gas: 3000000,
           timeout: 120000,
           throwOnTransactionFailures: true,
       },
