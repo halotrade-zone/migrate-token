@@ -3,6 +3,8 @@ This contract allows users to migrate their tokens from [Old AURA contract](http
 
 The migration rate is 1:1 and the migration direction is one-way (users can only migrate from Old AURA to CeAURA).
 
+The contract was deployed on BSC mainnet at: [0xf4e69fd2be7cf552f89e4da878118c806c54ef5f](https://bscscan.com/address/0xf4e69fd2be7cf552f89e4da878118c806c54ef5f)
+
 ## Admin functions
 ### Update migration tokens
 The admin can update the migration tokens by calling the `setTokens` function. This function takes two parameters: `_sourceToken` and `_targetToken`. The `_sourceToken` is the new address of the old AURA token contract and the `_targetToken` is the new address of the CeAURA token contract. Both parameters are of type `address` and must be different from the zero address.
